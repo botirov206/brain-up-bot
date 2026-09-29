@@ -7,6 +7,7 @@ import {
   clearReply,
   findUser,
   getDayStatus,
+  getGroupChatId,
   updateUserProfile,
   type ReplyKind,
 } from "../repo.js";
@@ -89,7 +90,8 @@ export async function nudgeIfWaiting(ctx: Context): Promise<void> {
  */
 async function publishReply(bot: Bot, name: string, fileId: string, kind: ReplyKind): Promise<void> {
   const caption = texts.groupReplyCaption(name);
-  const chatId = config.groupChatId;
+  const chatId = await getGroupChatId();
+  if (!chatId) throw new Error("group chat id is not set");
   if (kind === "voice") {
     await bot.api.sendVoice(chatId, fileId, { caption });
     return;

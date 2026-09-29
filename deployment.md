@@ -45,7 +45,7 @@ Edit `.env` and fill in every value. `example.env` says where each one comes fro
 - `BOT_TOKEN` from @BotFather (`/newbot`)
 - `BOT_USERNAME` without `@`
 - `DATABASE_URL` from Neon: console.neon.tech → your project → Connect → pooled connection string (`postgresql://...`, host usually contains `-pooler`, `sslmode=require`)
-- `GROUP_CHAT_ID` numeric id of Brain-Up Поток-1 (often `-100...`). Add the bot and make it an admin first.
+- `GROUP_CHAT_ID` optional. Leave it empty, add the bot as a group admin, then an admin sends `/group -100...` in the bot (or `/group` inside the group). A value here is used only until `/group` saves one.
 - `ADMIN_TELEGRAM_IDS` comma-separated numeric user ids from @userinfobot
 - `TIMEZONE=Asia/Tashkent`
 
@@ -110,7 +110,7 @@ journalctl -u brain-up-bot -f
 journalctl -u brain-up-bot -n 200 --no-pager
 ```
 
-A healthy start logs the timezone, `Applied migration` or `Migrations already up to date`, the three cron times, and `Long polling as @your_bot`.
+A healthy start logs the timezone, `Applied migration` or `Migrations already up to date`, the daily schedule (including 12:00 wake-button cleanup), and `Long polling as @your_bot`.
 
 Failed Telegram sends are logged and the process keeps running. A missing `BOT_TOKEN`, `DATABASE_URL`, `GROUP_CHAT_ID`, or `BOT_USERNAME` makes the process exit; systemd will restart it until `.env` is fixed.
 

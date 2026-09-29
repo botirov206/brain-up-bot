@@ -1,13 +1,17 @@
 import { Bot, type Context } from "grammy";
+import { adminCommands, memberCommands } from "./admin-ui.js";
 import { config } from "./config.js";
 import { parseCommand } from "./commands.js";
-import { handleAdminCommand } from "./handlers/admin.js";
+import { handleAdminButton, handleAdminCommand } from "./handlers/admin.js";
+import { captureExplanation, captureGroupExplanation } from "./handlers/explain.js";
+import { beginFeedback, captureFeedback, handleMemberButton } from "./handlers/feedback.js";
 import { handleMedia, nudgeIfWaiting } from "./handlers/media.js";
 import { handleStart } from "./handlers/start.js";
 import { logError } from "./log.js";
+import { clearUserPending } from "./repo.js";
 import { texts } from "./texts.js";
 
-const ADMIN_COMMANDS = new Set(["settings", "topics", "topicadd", "report", "members"]);
+const ADMIN_COMMANDS = new Set(["settings", "topics", "topicadd", "report", "members", "group"]);
 
 async function guard(label: string, ctx: Context, fn: () => Promise<void>): Promise<void> {
   try {
@@ -33,7 +37,17 @@ export function createBot(): Bot {
     const parsed = parseCommand(ctx.message.text);
     await guard(parsed ? `command /${parsed.name}` : "text", ctx, async () => {
       if (!parsed) {
+        if (await handleAdminButton(ctx, bot)) return;
+        if (await handleMemberButton(ctx)) return;
+        if (await captureFeedback(ctx)) return;
+        if (await captureExplanation(ctx)) return;
+        if (await captureGroupExplanation(ctx)) return;
         await nudgeIfWaiting(ctx);
+        return;
+      }
+      if (ctx.chat?.type === "private" && ctx.from) await clearUserPending(String(ctx.from.id));
+      if (parsed.name === "feedback") {
+        await beginFeedback(ctx, parsed.body);
         return;
       }
       if (parsed.name === "start") {
@@ -61,24 +75,15 @@ export function createBot(): Bot {
 }
 
 export async function registerCommandMenu(bot: Bot): Promise<void> {
-  const member = [{ command: "start", description: "Botni boshlash" }];
-  const admin = [
-    ...member,
-    { command: "settings", description: "Show or change schedule times" },
-    { command: "topics", description: "List or add topics" },
-    { command: "topicadd", description: "Add one topic" },
-    { command: "report", description: "Post today's recap" },
-    { command: "members", description: "Show member counts" },
-  ];
   try {
-    await bot.api.setMyCommands(member);
+    await bot.api.setMyCommands(memberCommands);
   } catch (err) {
     logError("setMyCommands", err);
     return;
   }
   for (const id of config.adminIds) {
     try {
-      await bot.api.setMyCommands(admin, {
+      await bot.api.setMyCommands(adminCommands, {
         scope: { type: "chat", chat_id: Number(id) },
       });
     } catch (err) {

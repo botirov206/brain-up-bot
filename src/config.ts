@@ -26,11 +26,19 @@ function parseAdminIds(raw: string | undefined): string[] {
   return ids;
 }
 
-const groupChatId = required("GROUP_CHAT_ID");
-if (!/^-?\d+$/.test(groupChatId)) {
-  console.error("GROUP_CHAT_ID must be a numeric chat id (supergroups look like -100...).");
-  process.exit(1);
+function optionalGroupChatId(): string | null {
+  const value = process.env.GROUP_CHAT_ID?.trim() ?? "";
+  if (!value) return null;
+  if (!/^-?\d+$/.test(value)) {
+    console.error(
+      "GROUP_CHAT_ID must be a numeric chat id (supergroups look like -100...). Leave it empty and set the group with /group.",
+    );
+    process.exit(1);
+  }
+  return value;
 }
+
+const groupChatId = optionalGroupChatId();
 
 const botUsername = required("BOT_USERNAME").replace(/^@/, "");
 if (!/^[A-Za-z0-9_]{5,32}$/.test(botUsername)) {

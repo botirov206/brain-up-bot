@@ -3,11 +3,17 @@ import { config } from "./config.js";
 import { migrate, pool } from "./db.js";
 import { startScheduler, stopScheduler } from "./jobs.js";
 import { logError } from "./log.js";
+import { resolveGroupChatId } from "./group.js";
+import { seedGroupChatId } from "./repo.js";
 
 async function main(): Promise<void> {
   console.log(`Brain-Up bot starting (timezone ${config.timezone})`);
   await migrate();
+  await seedGroupChatId(config.groupChatId);
   const bot = createBot();
+  const groupChatId = await resolveGroupChatId(bot);
+  if (groupChatId) console.log(`Group chat id ${groupChatId}`);
+  else console.log("No group chat this bot can see. In the group, send /group.");
   await registerCommandMenu(bot);
   await startScheduler(bot);
 
