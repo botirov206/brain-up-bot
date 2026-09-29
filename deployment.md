@@ -112,7 +112,7 @@ journalctl -u brain-up-bot -n 200 --no-pager
 
 A healthy start logs the timezone, `Applied migration` or `Migrations already up to date`, the daily schedule (including 12:00 wake-button cleanup), and `Long polling as @your_bot`.
 
-Failed Telegram sends are logged and the process keeps running. A missing `BOT_TOKEN`, `DATABASE_URL`, `GROUP_CHAT_ID`, or `BOT_USERNAME` makes the process exit; systemd will restart it until `.env` is fixed.
+Failed Telegram sends are logged and the process keeps running. A missing `BOT_TOKEN`, `DATABASE_URL`, or `BOT_USERNAME` makes the process exit; systemd will restart it until `.env` is fixed. `GROUP_CHAT_ID` can stay empty until an admin connects a group with `/group`.
 
 ## 7. Updating
 
@@ -131,5 +131,5 @@ If `git pull` cannot run as `brainup` because of SSH keys, pull as your own user
 
 - Bot is a member and admin of Brain-Up Поток-1.
 - You pressed `/start` in private (so your id is stored) and `/topics add ...` at least once.
-- `/settings` shows `04:00`, `07:00`, and `21:00` in Asia/Tashkent, or whatever you changed.
+- `/settings` shows `05:00`, `07:00`, and `21:00` in Asia/Tashkent, or whatever you changed.
 - `/report` posts a recap into the group.

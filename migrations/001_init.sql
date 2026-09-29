@@ -37,7 +37,7 @@ CREATE INDEX days_date_idx ON days (date);
 
 CREATE TABLE settings (
   id integer PRIMARY KEY CHECK (id = 1),
-  wake_time text NOT NULL DEFAULT '04:00' CHECK (wake_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+  wake_time text NOT NULL DEFAULT '05:00' CHECK (wake_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
   topic_time text NOT NULL DEFAULT '07:00' CHECK (topic_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
   report_time text NOT NULL DEFAULT '21:00' CHECK (report_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$')
 );
