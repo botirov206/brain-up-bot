@@ -127,9 +127,21 @@ journalctl -u brain-up-bot -n 50 --no-pager
 
 If `git pull` cannot run as `brainup` because of SSH keys, pull as your own user and then `sudo chown -R brainup:brainup /opt/brain-up-bot` before restart.
 
-## 8. First day checklist
+## 8. Rollout of the forum challenge
 
-- Bot is a member and admin of Brain-Up Поток-1.
-- You pressed `/start` in private (so your id is stored) and `/topics add ...` at least once.
-- `/settings` shows `05:00`, `07:00`, and `21:00` in Asia/Tashkent, or whatever you changed.
-- `/report` posts a recap into the group.
+1. Back up the production database and record the deployed commit.
+2. Stop the old polling process so two pollers do not run together.
+3. Build this version and let startup apply the additive migrations. Do not reseed topics.
+4. Start with topic scheduling off: `/settings topics off`.
+5. Confirm the bot is a forum administrator with `can_restrict_members`. Bind all four topics from inside the real topics with `/bindtopic`.
+6. Open Users and confirm known people were reconciled. Do not treat an old Start row as membership until Telegram confirms it.
+7. Smoke-test one admin, one member, and one outsider. The outsider should see the waitlist text and must not receive a topic.
+8. Turn scheduling back on with `/settings topics on`.
+9. Watch failed and uncertain deliveries in `/settings` through one full day.
+10. Keep the database backup and the previous build. Do not drop the new tables to roll back, and do not run the old build against the live bot token.
+
+## 9. First day checklist
+
+- The connected chat is a forum supergroup and all four `/bindtopic` commands have been run.
+- `/settings` shows the saved times, grace period, bindings, and delivery counts.
+- `/report` posts into the daily topic, not General.

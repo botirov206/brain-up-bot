@@ -8,7 +8,7 @@ export const texts = {
   welcome:
     "👋 Salom! Men Brain-Up botiman.\n\n" +
     "🌅 Har tong guruhdagi bugungi «Uyg'ondim» tugmasi orqali uyg'onganingizni belgilang. Tugma 12:00 gacha ishlaydi.\n" +
-    "🎙 Kunlik mavzu shu yerga keladi. Javobni ovozli xabar yoki dumaloq video qilib yuboring.",
+    "🎙 Kunlik mavzu shu yerga keladi. Javobni ovoz, video yoki YouTube havolasi bilan yuboring.",
   alreadyRegistered: "✅ Siz botga ulangansiz. Uyg'onganingizni belgilash uchun guruhdagi bugungi tugmani 12:00 gacha bosing.",
   startInGroup: "🌅 Uyg'onishni belgilash uchun guruhdagi bugungi tugmani bosing. Bot bilan suhbat shaxsiy chatda davom etadi.",
   wakeOk: (time: string) => `✅ Bugungi uyg'onishingiz ${time} da qayd etildi. Ajoyib boshlanish!`,
@@ -18,12 +18,28 @@ export const texts = {
   wakeButton: "🌅 Uyg'ondim",
   wakeCount: (wakes: number, total: number) => `🌅 Bugun uyg'onganlar: ${wakes}/${total}`,
   topicDm: (date: string, topic: string) =>
-    `🧠 Bugungi mavzu (${date}):\n\n${topic}\n\n🎙 Javobingizni ovozli xabar yoki dumaloq video qilib shu chatga yuboring.`,
+    `🧠 Bugungi mavzu (${date}):\n\n${topic}\n\n🎙 Javobni ovoz, audio, video, dumaloq video yoki YouTube havolasi bilan yuboring.`,
+  topicForum: (name: string, topic: string) => `🧠 ${name}\n\n${topic}`,
+  topicMine: (topic: string) => `🧠 Bugungi mavzuingiz:\n\n${topic}`,
+  topicMissing: "🕒 Bugungi mavzu hali tayinlanmagan.",
+  waitlistOffer:
+    "Hozirgi challenge davom etmoqda, bu oqimga qo‘shilish vaqti tugagan. Keyingi oqim haqida xabar olish uchun kutish ro‘yxatiga yozilishingiz mumkin.",
+  waitlistJoined: "✅ Kutish ro‘yxatiga yozildingiz. Keyingi oqim haqida shu yerda xabar beramiz.",
+  waitlistAlready: "✅ Siz allaqachon kutish ro‘yxatidasiz.",
+  waitlistLeft: "✅ Kutish ro‘yxatidan chiqdingiz.",
+  membershipUnavailable: "⚠️ A’zolikni hozir tekshirib bo‘lmadi. Iltimos, birozdan keyin qayta urinib ko‘ring.",
+  blocked: "⛔️ Challengega kirish o‘chirilgan.",
+  forumNotConnected: "⚠️ Challenge guruhi hali botga ulanmagan. Admin guruh ichida /group yuborishi kerak.",
+  forumNotConnectedAdmin:
+    "⚠️ Forum is not connected yet, so membership cannot be checked.\n1. Make the bot an admin in the forum supergroup.\n2. Send /group inside that forum.\n3. Run /bindtopic daily, unusual, reminders, and exercises inside each topic.",
+  joinButton: "📝 Kutish ro‘yxatiga yozilish",
+  recheckButton: "🔄 A’zolikni qayta tekshirish",
+  withdrawButton: "🚪 Kutish ro‘yxatidan chiqish",
   replyThanks: "✅ Rahmat! Javobingiz guruhga yuborildi.",
   replyAlready: "✅ Bugungi javobingiz allaqachon qabul qilingan. Ertangi mavzuni kuting.",
   replyNoTopic: "🕒 Bugungi mavzu hali yuborilmadi. Keyinroq tekshiring.",
   replyNeedStart: "👋 Avval shu shaxsiy chatda /start buyrug'ini yuboring.",
-  replyWrongKind: "🎙 Javobni ovozli xabar yoki dumaloq video qilib yuboring. Matn va rasm mavzu javobi sifatida qabul qilinmaydi.",
+  replyWrongKind: "🎙 Javobni ovoz, audio, video yoki YouTube havolasi bilan yuboring.",
   replyGroupFailed: "⚠️ Javobni guruhga yubora olmadim. Iltimos, birozdan keyin qayta urinib ko'ring.",
   groupReplyCaption: (name: string) => `🎙 ${name} — bugungi mavzuga javob`,
   report: (date: string, wakes: number, replies: number, total: number, topicSent: number) =>
@@ -34,12 +50,10 @@ export const texts = {
   feedbackTooLong: "✂️ Xabar juda uzun. Iltimos, 2000 belgigacha qisqartiring.",
   feedbackHint: "💬 Fikr va takliflar uchun «Taklif» tugmasini bosing.",
   feedbackGroupUsage: "💬 Taklif yuborish: /feedback matningiz\nYoki botning shaxsiy chatida «Taklif» tugmasini bosing.",
-  explainAsk:
-    "📝 Bugun uyg'onishni belgilamadingiz yoki kech belgiladingiz.\n" +
-    "Sababini bitta xabarda yozing. Masalan, tugmani unutdingizmi yoki kech uyg'ondingizmi?",
+  explainAsk: "🕒 Kech turishga sababingiz nima bo‘ldi? Bitta xabarda yozing.",
   explainNotNeeded: "✅ Bugun o'z vaqtida belgilangansiz. Sabab yozishingiz shart emas.",
   explainAlready: "✅ Sababingiz allaqachon qabul qilingan.",
-  explainThanks: "✅ Rahmat! Sababingiz admin uchun saqlandi.",
+  explainThanks: "✅ Sababingiz adminga yuborildi. U ko‘rib chiqadi.",
   explainTooLong: "✂️ Sabab juda uzun. Iltimos, 2000 belgigacha qisqartiring.",
   explainButton: "📝 Sababni yozish",
   explainGroup: (onTime: string) =>

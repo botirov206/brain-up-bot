@@ -5,20 +5,9 @@ import pg from "pg";
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { config } from "./config.js";
 import { logError } from "./log.js";
+import { sslFor } from "./pg-ssl.js";
 
 const { Pool } = pg;
-
-/**
- * pg already turns `sslmode` in the URL into TLS config, and that parsed
- * value overwrites an explicit `ssl` option. When the URL has no sslmode
- * but the host is Neon, force TLS anyway. Prefer the pooled Neon string
- * with `sslmode=require` (see example.env).
- */
-function sslFor(databaseUrl: string): { rejectUnauthorized: boolean } | undefined {
-  if (/[?&]sslmode=/i.test(databaseUrl)) return undefined;
-  if (/\.neon\.tech/i.test(databaseUrl)) return { rejectUnauthorized: false };
-  return undefined;
-}
 
 export const pool = new Pool({
   connectionString: config.databaseUrl,

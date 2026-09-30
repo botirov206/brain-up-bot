@@ -1,11 +1,14 @@
 import type { Bot, Context } from "grammy";
-import { adminKeyboard, ensureAdminMenu, memberKeyboard } from "../admin-ui.js";
-import { config } from "../config.js";
+import { requireParticipantAccess } from "../access.js";
+import { memberKeyboard } from "../admin-ui.js";
+import { config, isConfiguredAdmin } from "../config.js";
 import { logError } from "../log.js";
 import { displayName } from "../names.js";
-import { findUser, getDayPost, recordWake, upsertUser } from "../repo.js";
+import { wakeCardBand } from "../accountability.js";
+import { findUser, getDayNote, getDayPost, getSettings, recordWake, setUserPending, setWakeCard, upsertUser } from "../repo.js";
 import { texts } from "../texts.js";
 import { activeWakePayload, formatTime, todayDateString } from "../time.js";
+import { replyDenied } from "./flow.js";
 import { beginExplain } from "./explain.js";
 import { upsertWakeCount } from "../jobs.js";
 
@@ -24,17 +27,38 @@ export async function handleStart(ctx: Context, bot: Bot, payload: string): Prom
     telegramId,
     name: displayName(from),
     username: from.username ?? null,
-    makeAdmin: config.adminIds.includes(telegramId),
+    makeAdmin: isConfiguredAdmin(telegramId),
     started: true,
   });
 
-  const isAdminUser = user.role === "admin";
-  const markup = { reply_markup: isAdminUser ? adminKeyboard : memberKeyboard };
-  if (isAdminUser) await ensureAdminMenu(ctx.api, from.id);
-  const withHint = (text: string) => (isAdminUser ? text : `${text}\n\n${texts.feedbackHint}`);
-  const welcome = isAdminUser ? texts.adminWelcome : texts.welcome;
+  const markup = { reply_markup: memberKeyboard };
+  const withHint = (text: string) => `${text}\n\n${texts.feedbackHint}`;
+  const welcome = texts.welcome;
 
-  if (payload === "explain") {
+  if ((payload === "wake" || payload.startsWith("wake_")) && !activeWakePayload(payload, config.timezone)) {
+    if (first) await ctx.reply(welcome, markup);
+    await ctx.reply(texts.wakeExpired, markup);
+    return;
+  }
+
+  const access = await requireParticipantAccess({
+    api: bot.api,
+    telegramId,
+    name: displayName(from),
+    username: from.username ?? null,
+    isBot: from.is_bot,
+  });
+  if (!access.ok) {
+    await replyDenied(ctx, access);
+    return;
+  }
+
+  if (payload === "explain" || payload.startsWith("explain_")) {
+    const todayKey = todayDateString(config.timezone).replaceAll("-", "");
+    if (payload !== "explain" && payload !== `explain_${todayKey}`) {
+      await ctx.reply(texts.wakeExpired, markup);
+      return;
+    }
     if (first) await ctx.reply(welcome, markup);
     await beginExplain(ctx, user.id, user.role);
     return;
@@ -42,7 +66,7 @@ export async function handleStart(ctx: Context, bot: Bot, payload: string): Prom
 
   if (payload === "wake" || payload.startsWith("wake_")) {
     const today = todayDateString(config.timezone);
-    if (!activeWakePayload(payload, config.timezone) || !(await getDayPost(today, "wake"))) {
+    if (!(await getDayPost(today, "wake"))) {
       if (first) await ctx.reply(welcome, markup);
       await ctx.reply(texts.wakeExpired, markup);
       return;
@@ -57,9 +81,22 @@ export async function handleStart(ctx: Context, bot: Bot, payload: string): Prom
       }
     }
     if (first) await ctx.reply(welcome, markup);
+    const settings = await getSettings();
+    const note = await getDayNote(user.id, today);
+    const band = wakeCardBand(time, settings.on_time);
+    if (band === "green") {
+      if (note?.wakeCard !== "green") await setWakeCard(user.id, today, "green");
+      await ctx.reply(withHint(`${wake.already ? texts.wakeAlready(time) : texts.wakeOk(time)}\n\n🟢 Muvaffaqiyatli.`), markup);
+      return;
+    }
+    if (!note?.wakeCard && !note?.explanation) {
+      await setUserPending(user.id, "explain", { date: today }, new Date(Date.now() + 18 * 60 * 60 * 1000));
+      await ctx.reply(`${wake.already ? texts.wakeAlready(time) : texts.wakeOk(time)}\n\n${texts.explainAsk}`, markup);
+      return;
+    }
     await ctx.reply(withHint(wake.already ? texts.wakeAlready(time) : texts.wakeOk(time)), markup);
     return;
   }
 
-  await ctx.reply(withHint(first ? welcome : isAdminUser ? texts.adminAlready : texts.alreadyRegistered), markup);
+  await ctx.reply(withHint(first ? welcome : texts.alreadyRegistered), markup);
 }

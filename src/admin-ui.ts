@@ -6,6 +6,7 @@ const startCommand = { command: "start", description: "Botni boshlash" };
 export const memberCommands = [
   startCommand,
   { command: "feedback", description: "Taklif yuborish" },
+  { command: "admin", description: "Admin menyusi" },
 ];
 
 export const adminCommands = [
@@ -22,10 +23,15 @@ export const adminButtons = {
   topics: "🧠 Topics",
   settings: "⏰ Schedule Settings",
   feedback: "💬 Member feedback",
+  users: "👥 Users",
+  accountability: "⚖️ Accountability",
+  member: "👤 Ishtirokchi",
 } as const;
 
 export const memberButtons = {
-  feedback: "Taklif",
+  plan: "📋 Bugungi rejam",
+  topic: "🧠 Bugungi mavzum",
+  feedback: "💬 Taklif",
 } as const;
 
 const buttonLabels = new Set<string>(Object.values(adminButtons));
@@ -65,16 +71,37 @@ export const adminKeyboard = new Keyboard()
   .row()
   .text(adminButtons.settings)
   .text(adminButtons.feedback)
+  .row()
+  .text(adminButtons.users)
+  .text(adminButtons.accountability)
+  .row()
+  .text(adminButtons.member)
   .resized()
   .persistent();
 
-export const memberKeyboard = new Keyboard().text(memberButtons.feedback).resized().persistent();
+export const memberKeyboard = new Keyboard()
+  .text(memberButtons.plan)
+  .row()
+  .text(memberButtons.topic)
+  .row()
+  .text(memberButtons.feedback)
+  .resized()
+  .persistent();
 
-export function memberMarkup(role: string) {
-  return role === "admin" ? undefined : { reply_markup: memberKeyboard };
+export function memberMarkup(_role: string) {
+  return { reply_markup: memberKeyboard };
 }
 
 const menuReady = new Set<number>();
+
+export async function ensureMemberMenu(api: Api, userId: number): Promise<void> {
+  menuReady.delete(userId);
+  try {
+    await api.setMyCommands(memberCommands, { scope: { type: "chat", chat_id: userId } });
+  } catch (err) {
+    logError(`setMyCommands member ${userId}`, err);
+  }
+}
 
 /** Chat-scoped commands replace the default menu, which only lists /start. */
 export async function ensureAdminMenu(api: Api, userId: number): Promise<void> {

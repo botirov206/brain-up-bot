@@ -3,13 +3,15 @@ export type ParsedCommand = {
   body: string;
 };
 
-/** Parse a full message. The body keeps internal newlines (for /topics add). */
-export function parseCommand(text: string): ParsedCommand | null {
-  const match = /^\/([A-Za-z0-9_]+)(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/.exec(text.trim());
+/** Parse a full message. Commands aimed at another bot are ignored. */
+export function parseCommand(text: string, botUsername?: string): ParsedCommand | null {
+  const match = /^\/([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?(?:\s+([\s\S]*))?$/.exec(text.trim());
   if (!match) return null;
   const name = match[1]?.toLowerCase();
+  const mention = match[2];
   if (!name) return null;
-  return { name, body: (match[2] ?? "").trim() };
+  if (mention && botUsername && mention.toLowerCase() !== botUsername.toLowerCase()) return null;
+  return { name, body: (match[3] ?? "").trim() };
 }
 
 /**

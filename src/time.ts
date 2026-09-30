@@ -73,6 +73,49 @@ export function parseHHmm(input: string): string | null {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+/** Add minutes within the same calendar day. Returns null when the result would cross midnight. */
+export function addMinutes(hhmm: string, minutes: number): string | null {
+  const parsed = parseHHmm(hhmm);
+  if (!parsed || !Number.isInteger(minutes)) return null;
+  const [hour, minute] = parsed.split(":");
+  if (hour === undefined || minute === undefined) return null;
+  const total = Number(hour) * 60 + Number(minute) + minutes;
+  if (total < 0 || total >= 24 * 60) return null;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** UTC instant for a wall-clock time in an IANA timezone. */
+export function zonedTimeToUtc(date: string, hhmm: string, timeZone: string): Date {
+  const parsed = parseHHmm(hhmm);
+  const [yearRaw, monthRaw, dayRaw] = date.split("-");
+  if (!parsed || !yearRaw || !monthRaw || !dayRaw) throw new Error(`Invalid zoned time: ${date} ${hhmm}`);
+  const [hourRaw, minuteRaw] = parsed.split(":");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  const guess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const instant = new Date(guess.getTime() - timeZoneOffsetMs(timeZone, guess));
+  return new Date(guess.getTime() - timeZoneOffsetMs(timeZone, instant));
+}
+
+function timeZoneOffsetMs(timeZone: string, date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+  const value = (type: string): number => Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
+  return asUtc - date.getTime();
+}
+
 /** Cron expression (minute hour * * *) for an HH:mm wall time. */
 export function hhmmToCron(hhmm: string): string {
   const parsed = parseHHmm(hhmm);

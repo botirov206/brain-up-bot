@@ -62,3 +62,8 @@ export const config = {
   botUsername,
   timezone,
 };
+
+/** The configured id list is the only source of admin authority. */
+export function isConfiguredAdmin(telegramId: string | number): boolean {
+  return config.adminIds.includes(String(telegramId));
+}

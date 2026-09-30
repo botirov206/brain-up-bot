@@ -1,6 +1,8 @@
 import type { Context } from "grammy";
+import { requireParticipantAccess } from "../access.js";
 import { memberButtons, memberMarkup } from "../admin-ui.js";
 import { config } from "../config.js";
+import { getGroupChatId } from "../repo.js";
 import { escapeHtml, profileLink } from "../html.js";
 import { displayName } from "../names.js";
 import {
@@ -8,18 +10,20 @@ import {
   insertFeedback,
   listRecentFeedback,
   setUserPending,
-  upsertUser,
 } from "../repo.js";
 import { clipText, texts } from "../texts.js";
 import { formatDateTime } from "../time.js";
+import { replyDenied } from "./flow.js";
 
 const MAX_FEEDBACK = 2000;
 
 export async function beginFeedback(ctx: Context, body = ""): Promise<void> {
   const from = ctx.from;
-  if (!from) return;
+  if (!from || from.is_bot || ctx.message?.sender_chat) return;
   const chatType = ctx.chat?.type;
   if (chatType === "group" || chatType === "supergroup") {
+    const connected = await getGroupChatId();
+    if (!connected || String(ctx.chat?.id) !== connected) return;
     const text = body.trim();
     if (!text) {
       await ctx.reply(texts.feedbackGroupUsage);
@@ -29,23 +33,32 @@ export async function beginFeedback(ctx: Context, body = ""): Promise<void> {
       await ctx.reply(texts.feedbackTooLong);
       return;
     }
-    const user = await upsertUser({
+    const access = await requireParticipantAccess({
+      api: ctx.api,
       telegramId: String(from.id),
       name: displayName(from),
       username: from.username ?? null,
-      makeAdmin: config.adminIds.includes(String(from.id)),
-      started: false,
     });
-    await insertFeedback(user.id, text);
+    if (!access.ok) {
+      await replyDenied(ctx, access);
+      return;
+    }
+    await insertFeedback(access.user.id, text);
     await ctx.reply(texts.feedbackThanks);
     return;
   }
   if (chatType !== "private") return;
-  const user = await findUser(String(from.id));
-  if (!user?.started_at) {
-    await ctx.reply(texts.replyNeedStart);
+  const access = await requireParticipantAccess({
+    api: ctx.api,
+    telegramId: String(from.id),
+    name: displayName(from),
+    username: from.username ?? null,
+  });
+  if (!access.ok) {
+    await replyDenied(ctx, access);
     return;
   }
+  const user = access.user;
   const text = body.trim();
   if (text) {
     if (text.length > MAX_FEEDBACK) {
@@ -60,9 +73,20 @@ export async function beginFeedback(ctx: Context, body = ""): Promise<void> {
   await ctx.reply(texts.feedbackAsk, memberMarkup(user.role));
 }
 
-export async function handleMemberButton(ctx: Context): Promise<boolean> {
+export async function handleMemberButton(ctx: Context, bot?: { api: Context["api"] }): Promise<boolean> {
   if (ctx.chat?.type !== "private") return false;
-  if (ctx.message?.text !== memberButtons.feedback) return false;
+  const text = ctx.message?.text;
+  if (text === memberButtons.plan) {
+    const { openPlan } = await import("./flow.js");
+    await openPlan(ctx, (bot ?? ctx) as never);
+    return true;
+  }
+  if (text === memberButtons.topic) {
+    const { showMyTopic } = await import("./flow.js");
+    await showMyTopic(ctx, (bot ?? ctx) as never);
+    return true;
+  }
+  if (text !== memberButtons.feedback && text !== "Taklif") return false;
   await beginFeedback(ctx);
   return true;
 }
@@ -75,6 +99,16 @@ export async function captureFeedback(ctx: Context): Promise<boolean> {
   if (!from || !text) return false;
   const user = await findUser(String(from.id));
   if (user?.pending !== "feedback") return false;
+  const access = await requireParticipantAccess({
+    api: ctx.api,
+    telegramId: String(from.id),
+    name: displayName(from),
+    username: from.username ?? null,
+  });
+  if (!access.ok) {
+    await replyDenied(ctx, access);
+    return true;
+  }
   if (text.length > MAX_FEEDBACK) {
     await ctx.reply(texts.feedbackTooLong, memberMarkup(user.role));
     return true;

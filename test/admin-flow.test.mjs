@@ -54,10 +54,11 @@ function context(text, type = "private") {
   };
 }
 
-test("admin keyboard has six distinct actions; old Group and Report labels open their replacements", () => {
+test("admin keyboard keeps the previous actions and adds users", () => {
   const labels = adminKeyboard.keyboard.flat().map((button) => button.text);
-  assert.equal(labels.length, 6);
-  assert.equal(new Set(labels).size, 6);
+  assert.equal(labels.includes("👥 Users"), true);
+  assert.equal(labels.includes("🌅 Check-ins"), true);
+  assert.equal(new Set(labels).size, labels.length);
   assert.equal(labels.includes("👥 Group"), false);
   assert.equal(labels.includes("📊 Report"), false);
   assert.equal(adminButtonAction("👥 Group"), adminButtons.settings);
@@ -69,6 +70,7 @@ test("old Group button opens Schedule Settings with group guidance", async () =>
     if (sql.startsWith("UPDATE users SET pending") || sql.startsWith("INSERT INTO settings")) return [];
     if (sql.includes("SELECT wake_time")) return [settings];
     if (sql.includes("SELECT group_chat_id")) return [{ group_chat_id: null }];
+    if (sql.includes("FROM outbound_deliveries")) return [{ failed: 0, uncertain: 0 }];
     throw new Error(`Unexpected SQL: ${sql}`);
   }, async () => {
     const ctx = context("👥 Group");
@@ -130,7 +132,7 @@ test("/group inside a group still connects it after removing the Group button", 
   }, async () => {
     const ctx = context("/group", "supergroup");
     const bot = { api: {
-      getChat: async () => ({ id: -1001, type: "supergroup", title: "Brain-Up" }),
+      getChat: async () => ({ id: -1001, type: "supergroup", is_forum: true, title: "Brain-Up" }),
       getMe: async () => ({ id: 99 }),
       getChatMember: async () => ({ status: "administrator" }),
     } };
@@ -142,6 +144,7 @@ test("/group inside a group still connects it after removing the Group button", 
 test("/report in private posts the daily totals once", async () => {
   await withQuery(async (sql) => {
     if (sql.startsWith("INSERT INTO settings")) return [];
+    if (sql.includes("SELECT wake_time")) return [{ ...settings, topic_daily_id: 300 }];
     if (sql.includes("SELECT group_chat_id")) return [{ group_chat_id: "-1001" }];
     if (sql.includes("AS started") && sql.includes("AS wakes")) {
       assert.match(sql, /AS topic_sent/);
@@ -151,13 +154,14 @@ test("/report in private posts the daily totals once", async () => {
   }, async () => {
     const posts = [];
     const bot = { api: {
-      getChat: async () => ({ id: -1001, type: "supergroup", title: "Brain-Up" }),
-      sendMessage: async (chat, body) => { posts.push({ chat, body }); },
+      getChat: async () => ({ id: -1001, type: "supergroup", is_forum: true, title: "Brain-Up" }),
+      sendMessage: async (chat, body, options) => { posts.push({ chat, body, options }); },
     } };
     const ctx = context("/report");
     await handleAdminCommand(ctx, bot, "report", "");
     assert.equal(posts.length, 1);
     assert.equal(posts[0].chat, "-1001");
+    assert.equal(posts[0].options.message_thread_id, 300);
     assert.match(posts[0].body, /Uyg'onganlar: 2\/3/);
     assert.match(posts[0].body, /Mavzuga javoblar: 1\/2/);
     assert.match(ctx.replies[0].body, /posted to the group/);
@@ -183,25 +187,28 @@ test("a first-time admin sees the new menu and its purpose", async () => {
   await withQuery(async (sql) => {
     if (sql.includes("FROM users WHERE telegram_id")) return [];
     if (sql.startsWith("INSERT INTO users")) return [user];
+    if (sql.startsWith("INSERT INTO settings")) return [];
+    if (sql.includes("SELECT group_chat_id")) return [{ group_chat_id: null }];
     throw new Error(`Unexpected SQL: ${sql}`);
   }, async () => {
     const ctx = context("/start");
     await handleStart(ctx, {}, "");
-    assert.match(ctx.replies[0].body, /Today's progress shows check-ins and topic replies/);
-    assert.equal(ctx.replies[0].options.reply_markup, adminKeyboard);
+    assert.match(ctx.replies[0].body, /Challenge guruhi hali botga ulanmagan/);
+    const { memberKeyboard } = await import("../dist/admin-ui.js");
+    assert.equal(ctx.replies[0].options.reply_markup, memberKeyboard);
   });
 });
 
 test("wake cleanup deletes tracked posts and removes a button if deletion fails", async () => {
   const removed = [];
   await withQuery(async (sql, params) => {
-    if (sql.includes("FROM day_posts WHERE kind = 'wake'")) return [
-      { date: "2026-09-29", message_id: "10" },
-      { date: "2026-09-30", message_id: "11" },
+    if (sql.startsWith("DELETE FROM day_posts")) { removed.push(params[0]); return []; }
+    if (sql.includes("FROM day_posts")) return [
+      { date: "2026-09-29", kind: "wake", message_id: "10", chat_id: "-1001", topic_id: "300", part_index: 0 },
+      { date: "2026-09-30", kind: "wake", message_id: "11", chat_id: "-1001", topic_id: "300", part_index: 0 },
     ];
     if (sql.startsWith("INSERT INTO settings")) return [];
     if (sql.includes("SELECT group_chat_id")) return [{ group_chat_id: "-1001" }];
-    if (sql.startsWith("DELETE FROM day_posts")) { removed.push(params[0]); return []; }
     throw new Error(`Unexpected SQL: ${sql}`);
   }, async () => {
     const edited = [];
@@ -244,10 +251,13 @@ test("/feedback text in private chat saves the text without a second prompt", as
   await withQuery(async (sql) => {
     sqls.push(sql);
     if (sql.includes("FROM users WHERE telegram_id")) return [user];
+    if (sql.startsWith("INSERT INTO settings") || sql.startsWith("INSERT INTO forum_memberships") || sql.startsWith("UPDATE waitlist") || sql.startsWith("UPDATE users SET name")) return [];
+    if (sql.includes("SELECT group_chat_id")) return [{ group_chat_id: "-1001" }];
     if (sql.startsWith("INSERT INTO feedback")) return [];
     throw new Error(`Unexpected SQL: ${sql}`);
   }, async () => {
     const ctx = context("/feedback Use a timer");
+    ctx.api.getChatMember = async () => ({ status: "member" });
     await beginFeedback(ctx, "Use a timer");
     assert.match(ctx.replies[0].body, /Rahmat/);
     assert.equal(sqls.some((sql) => sql.includes("SET pending")), false);

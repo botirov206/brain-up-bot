@@ -46,11 +46,13 @@ export async function todayBoardText(settings: Settings, memberCount: number | n
     const day = person.byDate.get(today);
     const kind = wakeClass(config.timezone, day?.wakeUpAt ?? null, settings.on_time);
     const wake =
-      kind === "on_time" && day?.wakeUpAt
-        ? `✅ ${formatTime(config.timezone, day.wakeUpAt)}`
-        : kind === "late" && day?.wakeUpAt
-          ? `🕒 late ${formatTime(config.timezone, day.wakeUpAt)}`
-          : "🌙 no check-in";
+      day?.wakeCard === "yellow" && day.wakeUpAt
+        ? `🟡 ${formatTime(config.timezone, day.wakeUpAt)}`
+        : kind === "on_time" && day?.wakeUpAt
+          ? `✅ ${formatTime(config.timezone, day.wakeUpAt)}`
+          : kind === "late" && day?.wakeUpAt
+            ? `🟠 ${formatTime(config.timezone, day.wakeUpAt)}`
+            : "🔴 no check-in";
     const reply = !day?.topicSent ? "topic pending" : day.replied ? "🎙 replied" : "🎙 no reply";
     lines.push(`${who(person)}  ${wake}  ${reply}`);
     if (day?.explanation) lines.push(`  📝 ${escapeHtml(clipText(day.explanation, 160))}`);
@@ -83,12 +85,12 @@ export async function standingBoardText(settings: Settings, memberCount: number 
     lines.push("", "────────", "", "✅ On track");
     for (const row of steady.slice(0, 30)) lines.push(standingLine(row.person, row.tally));
   }
-  lines.push("", `ℹ️ ✅ on time · 🕒 late · 🌙 missed · 🎙 replies/topics. On time means by ${settings.on_time}.`);
+  lines.push("", `ℹ️ ✅ on time · 🟠 late · 🔴 missed · 🟡 sababli · 🎙 replies/topics. On time means by ${settings.on_time}.`);
   return lines.join("\n");
 }
 
-function standingLine(person: PersonFacts, tally: { onTime: number; late: number; missed: number; sent: number; replies: number }): string {
-  return `${who(person)}  ✅ ${tally.onTime} · 🕒 ${tally.late} · 🌙 ${tally.missed} · 🎙 ${tally.replies}/${tally.sent}`;
+function standingLine(person: PersonFacts, tally: { onTime: number; late: number; missed: number; excused: number; sent: number; replies: number }): string {
+  return `${who(person)}  ✅ ${tally.onTime} · 🟠 ${tally.late} · 🔴 ${tally.missed} · 🟡 ${tally.excused} · 🎙 ${tally.replies}/${tally.sent}`;
 }
 
 function coverageLine(known: number, memberCount: number | null): string {

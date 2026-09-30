@@ -1,3 +1,4 @@
+import { reconcileKnownMemberships } from "./access.js";
 import { createBot, registerCommandMenu } from "./bot.js";
 import { config } from "./config.js";
 import { migrate, pool } from "./db.js";
@@ -14,6 +15,7 @@ async function main(): Promise<void> {
   const groupChatId = await resolveGroupChatId(bot);
   if (groupChatId) console.log(`Group chat id ${groupChatId}`);
   else console.log("No group chat this bot can see. In the group, send /group.");
+  await reconcileKnownMemberships(bot.api);
   await registerCommandMenu(bot);
   await startScheduler(bot);
 
@@ -29,6 +31,7 @@ async function main(): Promise<void> {
   process.once("SIGTERM", () => shutdown("SIGTERM"));
 
   await bot.start({
+    allowed_updates: ["message", "callback_query", "chat_member", "my_chat_member"],
     onStart: (info) => {
       console.log(`Long polling as @${info.username}`);
       if (info.username !== config.botUsername) {

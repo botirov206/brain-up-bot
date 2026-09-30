@@ -1,8 +1,8 @@
 import type { Bot, Context } from "grammy";
 import { standingBoardText, todayBoardText } from "../boards.js";
-import { adminButtons, adminButtonAction, adminKeyboard, ensureAdminMenu } from "../admin-ui.js";
+import { adminButtons, adminButtonAction, adminKeyboard, ensureAdminMenu, ensureMemberMenu, memberKeyboard } from "../admin-ui.js";
 import { topicAddText } from "../commands.js";
-import { config } from "../config.js";
+import { config, isConfiguredAdmin } from "../config.js";
 import { groupMemberCount, lookupGroup } from "../group.js";
 import { feedbackBoardText } from "./feedback.js";
 import { profileLink } from "../html.js";
@@ -21,17 +21,30 @@ import {
   type SettingKey,
 } from "../repo.js";
 import { errorText } from "../log.js";
-import { clipText, MAX_TOPIC_LENGTH } from "../texts.js";
+import { deliveryProblemCounts } from "../store.js";
+import { clipText, MAX_TOPIC_LENGTH, texts } from "../texts.js";
 import { formatTime, parseHHmm, todayDateString } from "../time.js";
 
 function isSettingKey(value: string): value is SettingKey {
-  return value === "wake" || value === "topic" || value === "report" || value === "ontime" || value === "explain";
+  return value === "wake" || value === "topic" || value === "report" || value === "ontime" || value === "explain" || value === "plan" || value === "response";
 }
 
-async function isAdmin(telegramId: number): Promise<boolean> {
-  if (config.adminIds.includes(String(telegramId))) return true;
-  const user = await findUser(String(telegramId));
-  return user?.role === "admin";
+function isAdmin(telegramId: number): boolean {
+  return isConfiguredAdmin(telegramId);
+}
+
+export async function openAdminHome(ctx: Context): Promise<void> {
+  const from = ctx.from;
+  if (!from || ctx.chat?.type !== "private") {
+    await ctx.reply("Admin menyusi shaxsiy chatda ochiladi.");
+    return;
+  }
+  if (!isAdmin(from.id)) {
+    await ctx.reply("Bu buyruq adminlar uchun.", { reply_markup: memberKeyboard });
+    return;
+  }
+  await ensureAdminMenu(ctx.api, from.id);
+  await ctx.reply(texts.adminWelcome, { reply_markup: adminKeyboard });
 }
 
 export async function handleAdminCommand(
@@ -44,11 +57,11 @@ export async function handleAdminCommand(
   if (chatType !== "private" && chatType !== "group" && chatType !== "supergroup") return;
   const from = ctx.from;
   if (!from) return;
-  if (!(await isAdmin(from.id))) {
+  if (!isAdmin(from.id)) {
     await ctx.reply("🔒 This command is for admins. Ask an admin to add your Telegram ID in the bot settings.");
     return;
   }
-  if (chatType !== "private" && name !== "group") {
+  if (chatType !== "private" && name !== "group" && name !== "bindtopic") {
     await ctx.reply(`🔒 Open @${config.botUsername} privately to use admin commands. Send /start there to see the menu.`);
     return;
   }
@@ -68,11 +81,17 @@ export async function handleAdminCommand(
     case "report":
       await replyReportPosted(ctx, bot);
       return;
-    case "members":
-      await ctx.reply(await wakeBoardText(), { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+    case "members": {
+      const { usersText } = await import("./flow.js");
+      const view = await usersText(0);
+      await ctx.reply(view.text, { reply_markup: view.keyboard });
       return;
+    }
     case "group":
       await handleGroup(ctx, bot, body);
+      return;
+    case "bindtopic":
+      await handleBindTopic(ctx, body);
       return;
     default:
       return;
@@ -85,7 +104,7 @@ export async function handleAdminButton(ctx: Context, bot: Bot): Promise<boolean
   const from = ctx.from;
   const action = text && from ? adminButtonAction(text) : null;
   if (!action || !from) return false;
-  if (!(await isAdmin(from.id))) return false;
+  if (!isAdmin(from.id)) return false;
   await clearUserPending(String(from.id));
   await ensureAdminMenu(ctx.api, from.id);
   pinAdminKeyboard(ctx);
@@ -115,6 +134,21 @@ export async function handleAdminButton(ctx: Context, bot: Bot): Promise<boolean
     case adminButtons.feedback:
       await ctx.reply(await feedbackBoardText(), { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
       return true;
+    case adminButtons.users: {
+      const { usersText } = await import("./flow.js");
+      const view = await usersText(0);
+      await ctx.reply(view.text, { reply_markup: view.keyboard });
+      return true;
+    }
+    case adminButtons.member:
+      await ensureMemberMenu(ctx.api, from.id);
+      await ctx.reply("Ishtirokchi oynasi.", { reply_markup: memberKeyboard });
+      return true;
+    case adminButtons.accountability: {
+      const { handleFlowCallback } = await import("./flow.js");
+      await handleFlowCallback({ ...ctx, callbackQuery: { data: "ac:0" }, from: ctx.from } as Context, bot);
+      return true;
+    }
     default:
       return false;
   }
@@ -146,13 +180,14 @@ async function reportReply(result: ReportPost): Promise<string> {
 }
 
 function personLine(
-  row: { telegramId: string; name: string; username: string | null; wakeUpAt: Date | null },
+  row: { telegramId: string; name: string; username: string | null; wakeUpAt: Date | null; wakeCard: string | null },
   onTime: string,
 ): string {
   const who = profileLink(row.telegramId, row.name, row.username);
   if (!row.wakeUpAt) return who;
   const time = formatTime(config.timezone, row.wakeUpAt);
-  return time > onTime ? `🕒 ${time}  ${who}  late` : `✅ ${time}  ${who}`;
+  const mark = row.wakeCard === "red" ? "🔴" : row.wakeCard === "orange" ? "🟠" : row.wakeCard === "yellow" ? "🟡" : row.wakeCard === "green" ? "🟢" : time > onTime ? "🕒" : "✅";
+  return `${mark} ${time}  ${who}`;
 }
 
 async function wakeBoardText(): Promise<string> {
@@ -175,7 +210,27 @@ async function wakeBoardText(): Promise<string> {
 
 async function handleSettings(ctx: Context, body: string): Promise<void> {
   if (!body) {
-    await ctx.reply(formatSettings(await getSettings(), await getGroupChatId()));
+    const problems = await deliveryProblemCounts();
+    await ctx.reply(`${formatSettings(await getSettings(), await getGroupChatId())}\nDelivery problems: ${problems.failed} failed, ${problems.uncertain} uncertain.`);
+    return;
+  }
+  if (body === "topics on" || body === "topics off") {
+    const { setTopicScheduleEnabled } = await import("../repo.js");
+    const settings = await setTopicScheduleEnabled(body.endsWith("on"));
+    await reloadScheduler();
+    await ctx.reply(formatSettings(settings, await getGroupChatId()));
+    return;
+  }
+  if (body.startsWith("grace ")) {
+    const minutes = Number(body.slice(6));
+    if (!Number.isInteger(minutes) || minutes < 15 || minutes > 180) {
+      await ctx.reply("Grace must be a whole number of minutes from 15 to 180.");
+      return;
+    }
+    const { setGraceMinutes } = await import("../repo.js");
+    const settings = await setGraceMinutes(minutes);
+    await reloadScheduler();
+    await ctx.reply(formatSettings(settings, await getGroupChatId()));
     return;
   }
   const parts = body.split(/\s+/);
@@ -278,7 +333,9 @@ async function bindGroup(ctx: Context, bot: Bot, chatId: string): Promise<void> 
 
 async function handleTopics(ctx: Context, name: string, body: string): Promise<void> {
   if (name === "topics" && body === "") {
-    await ctx.reply(await topicListText());
+    const { topicBrowserText } = await import("./flow.js");
+    const view = await topicBrowserText(0);
+    await ctx.reply(view.text, { reply_markup: view.keyboard });
     return;
   }
   const text = topicAddText(name, body);
@@ -296,6 +353,28 @@ async function handleTopics(ctx: Context, name: string, body: string): Promise<v
   }
   const id = await insertTopic(text);
   await ctx.reply(`✅ Topic #${id} was added to the rotation.`);
+}
+
+async function handleBindTopic(ctx: Context, body: string): Promise<void> {
+  const slot = body.trim().toLowerCase();
+  if (slot !== "daily" && slot !== "unusual" && slot !== "reminders" && slot !== "exercises") {
+    await ctx.reply("Usage: /bindtopic daily|unusual|reminders|exercises — send it inside the forum topic.");
+    return;
+  }
+  const threadId = ctx.message?.message_thread_id;
+  const chatType = ctx.chat?.type;
+  if ((chatType !== "supergroup" && chatType !== "group") || threadId == null || !ctx.chat) {
+    await ctx.reply("Open the forum topic and send /bindtopic there.");
+    return;
+  }
+  const { bindTopic, getGroupChatId } = await import("../repo.js");
+  const saved = await getGroupChatId();
+  if (saved !== String(ctx.chat.id)) {
+    await ctx.reply("Connect this forum with /group before binding topics.");
+    return;
+  }
+  await bindTopic(slot, threadId);
+  await ctx.reply(`Saved ${slot} topic ${threadId}.`);
 }
 
 async function topicListText(): Promise<string> {

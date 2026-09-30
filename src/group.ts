@@ -14,7 +14,7 @@ export async function lookupGroup(bot: Bot, raw: string): Promise<GroupLookup> {
   for (const candidate of groupIdCandidates(raw)) {
     try {
       const chat = await bot.api.getChat(candidate);
-      if (chat.type !== "group" && chat.type !== "supergroup") {
+      if (chat.type !== "supergroup" || chat.is_forum !== true) {
         sawNonGroup = true;
         continue;
       }
@@ -30,17 +30,20 @@ export async function lookupGroup(bot: Bot, raw: string): Promise<GroupLookup> {
   return { ok: false, reason: sawNonGroup ? "notgroup" : "notfound" };
 }
 
-/** Validate the saved or configured group, rewriting a short id to -100… when found. */
+/** The saved connection wins. An env value is only a fallback before anything is saved. */
 export async function resolveGroupChatId(bot: Bot): Promise<string | null> {
   const saved = await getGroupChatId();
-  const raws = new Set([saved, config.groupChatId].filter((id): id is string => Boolean(id)));
-  for (const raw of raws) {
-    const found = await lookupGroup(bot, raw);
-    if (!found.ok) continue;
+  if (saved) {
+    const found = await lookupGroup(bot, saved);
+    if (!found.ok) return null;
     if (found.id !== saved) await setGroupChatId(found.id);
     return found.id;
   }
-  return null;
+  if (!config.groupChatId) return null;
+  const found = await lookupGroup(bot, config.groupChatId);
+  if (!found.ok) return null;
+  await setGroupChatId(found.id);
+  return found.id;
 }
 
 export async function groupMemberCount(bot: Bot): Promise<number | null> {
